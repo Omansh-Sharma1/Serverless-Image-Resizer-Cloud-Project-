@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serverless Image Resizer</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* --- Global Professional Dark Theme --- */
+body {
+    font-family: 'Roboto', sans-serif;
+    background: #121212;
+    color: #e0e0e0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 50px 20px;
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+}
+
+/* --- Deep Geometric Background --- */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at 10% 20%, rgba(43, 114, 255, 0.05) 0%, transparent 60%),
+                radial-gradient(circle at 90% 80%, rgba(0, 188, 212, 0.05) 0%, transparent 60%),
+                linear-gradient(135deg, rgba(255, 255, 255, 0.01) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 30px 30px;
+    opacity: 1;
+    z-index: -2;
+    transition: opacity 0.3s;
+}
+
+/* --- Preloader --- */
+#preloader {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #121212;
+    z-index: 9999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: opacity 0.5s ease-out, visibility 0s 0.5s;
+}
+
+#preloader.hidden {
+    opacity: 0;
+    visibility: hidden;
+}
+
+.loader-ring {
+    width: 70px;
+    height: 70px;
+    border: 4px solid rgba(43, 114, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #2b72ff;
+    border-right-color: #00bcd4;
+    animation: spin-alt 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+    filter: drop-shadow(0 0 10px rgba(43, 114, 255, 0.6));
+}
+
+@keyframes spin-alt {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* --- H1 - Title --- */
+h1 {
+    font-family: 'Roboto', sans-serif;
+    font-size: 3rem;
+    font-weight: 700;
+    margin-bottom: 50px;
+    color: #ffffff;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    border-bottom: 3px solid #2b72ff;
+    padding-bottom: 10px;
+    position: relative;
+}
+
+h1::after {
+    content: 'RESIZER';
+    position: absolute;
+    bottom: -5px;
+    right: 0;
+    font-size: 0.5rem;
+    color: #888;
+    letter-spacing: 0;
+}
+
+/* --- Upload Controls Container --- */
+#uploadControls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    height: 60px;
+    width: 100%;
+    margin-bottom: 20px; 
+}
+
+/* --- MODIFIED: Status Bar Styling --- */
+#statusBar {
+    min-height: 40px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: auto; 
+    max-width: 400px; 
+    margin-bottom: 30px;
+    transition: opacity 0.3s, transform 0.3s, background 0.3s, box-shadow 0.3s;
+    border-radius: 8px; 
+    padding: 10px 25px; 
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    color: #ffffff; 
+    
+    background: linear-gradient(135deg, #2b72ff 0%, #00bcd4 100%); 
+    box-shadow: 0 4px 15px rgba(43, 114, 255, 0.4); 
+
+    /* Hidden by default */
+    opacity: 0;
+    transform: translateY(10px);
+    pointer-events: none;
+    text-align: center; 
+    white-space: nowrap; 
+    overflow: hidden; 
+    text-overflow: ellipsis; 
+}
+
+#statusBar.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* The old #loadingMessage and #loader are now obsolete */
+#loadingMessage, #loader {
+    display: none;
+}
+
+/* --- Input and Upload Button Styling --- */
+.custom-file-input, button, a#downloadBtn {
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    font-weight: 500;
+    opacity: 1;
+}
+
+/* Disabled state for controls during loading */
+.disabled-controls .custom-file-input, 
+.disabled-controls button#uploadBtn {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+/* --- IMPROVED: File Input Styling --- */
+.custom-file-input {
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    border: 1px solid #2b72ff;
+    background: transparent;
+    padding: 0; 
+    height: 48px; 
+    display: flex;
+    align-items: center;
+    max-width: 350px;
+}
+
+.custom-file-input input[type="file"] {
+    position: absolute;
+    left: 0;
+    top: 0;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+}
+
+.custom-file-input span {
+    display: inline-block;
+    padding: 14px 20px;
+    color: #e0e0e0; 
+    font-weight: 500;
+    font-size: 0.95rem;
+    letter-spacing: 0.5px;
+    background: rgba(43, 114, 255, 0.1); 
+    position: relative;
+    padding-left: 45px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%; 
+}
+
+.custom-file-input span::before {
+    content: '📂';
+    font-size: 1.2rem;
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #00bcd4;
+}
+
+.custom-file-input.file-selected span {
+    background: rgba(0, 188, 212, 0.1);
+    border-left: 3px solid #00bcd4;
+    color: #00bcd4; 
+    font-weight: 400;
+}
+
+.custom-file-input:hover {
+    background: rgba(43, 114, 255, 0.2);
+    border-color: #5d93ff;
+    transform: translateY(-1px);
+}
+
+button#uploadBtn {
+    margin-left: 15px;
+    padding: 14px 30px;
+    background: #2b72ff;
+    border: none;
+    color: #ffffff;
+    font-weight: 500;
+    font-size: 0.95rem;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(43, 114, 255, 0.4);
+}
+
+button#uploadBtn:hover {
+    background: #5d93ff;
+    box-shadow: 0 6px 15px rgba(43, 114, 255, 0.6);
+    transform: translateY(-1px);
+}
+
+/* --- TOAST NOTIFICATION STYLING --- */
+#message {
+    position: fixed; 
+    top: 30px; 
+    right: 30px; 
+    transform: none; 
+    z-index: 100;
+    font-size: 1rem;
+    padding: 12px 25px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.1); 
+    color: #e0e0e0;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.4s ease-in-out, visibility 0.4s;
+    letter-spacing: 0.5px;
+    text-align: center;
+    border: 1px solid #444;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    font-weight: 400;
+    min-width: 250px; 
+}
+
+#message.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+#message.error {
+    background: rgba(255, 59, 48, 0.15); 
+    color: #ff3b30;
+    border-color: #ff3b30;
+    box-shadow: 0 4px 15px rgba(255, 59, 48, 0.3);
+}
+
+#message.success {
+    background: rgba(40, 200, 100, 0.15); 
+    color: #28c864;
+    border-color: #28c864;
+    box-shadow: 0 4px 15px rgba(40, 200, 100, 0.3);
+}
+
+/* --- Image Containers - Professional Layout --- */
+#mainContentWrapper {
+    display: flex;
+    justify-content: space-between; 
+    align-items: flex-start;
+    width: 100%; 
+    max-width: 1200px;
+    margin-top: 50px;
+    gap: 40px; /* Added gap for better spacing on large screens */
+}
+
+.image-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    width: 50%; /* Adjusted width for better flex distribution */
+    max-width: 450px;
+    position: relative; 
+}
+
+.image-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: #1e1e1e;
+    padding: 30px;
+    border-radius: 8px;
+    width: 100%;
+    transition: all 0.3s ease;
+    border: 1px solid #333333;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    order: 2; 
+}
+
+.image-box h2 {
+    margin-bottom: 20px;
+    font-size: 1.2rem;
+    font-weight: 500;
+    color: #00bcd4;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.image-preview {
+    border: 1px solid #333333;
+    border-radius: 4px;
+    width: 100%; 
+    max-width: 320px;
+    height: auto;
+    max-height: 300px;
+    object-fit: contain;
+    transition: all 0.3s;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+}
+
+/* --- Metadata (INFO) Styling (COOL ALIGNMENTS) --- */
+.info {
+    position: relative; 
+    margin-top: 0;
+    background: #1e1e1e; 
+    padding: 20px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    color: #cccccc;
+    border: 1px solid #3a3a3a;
+    width: 100%;
+    transition: all 0.5s ease;
+    order: 1;
+    text-align: left;
+}
+
+.info:empty {
+    height: 50px;
+    background: #121212;
+    border: 1px dashed #3a3a3a;
+}
+
+.info p {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    line-height: 1.4;
+    opacity: 0; 
+    animation: fadeInMetadata 0.8s forwards;
+}
+
+.info p strong {
+    color: #00bcd4;
+    font-weight: 400;
+}
+
+.info p span {
+    font-weight: 500;
+    color: #ffffff;
+}
+
+@keyframes fadeInMetadata {
+    to { opacity: 1; }
+}
+
+/* Download Button (now an anchor tag for download functionality) */
+a#downloadBtn {
+    margin-top: 50px;
+    padding: 16px 40px;
+    background: #2b72ff;
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    box-shadow: 0 8px 20px rgba(43, 114, 255, 0.4);
+    transition: all 0.3s ease;
+    display: none;
+    text-decoration: none; /* Make it look like a button */
+    text-align: center;
+}
+
+a#downloadBtn:hover {
+    background: #5d93ff;
+    box-shadow: 0 10px 25px rgba(43, 114, 255, 0.6);
+    transform: translateY(-2px);
+}
+
+
+/* --- Responsive Layout for Metadata and Images (Side-by-side) --- */
+@media (min-width: 900px) {
+    #mainContentWrapper {
+        justify-content: center;
+        gap: 120px; /* Increased gap for visual separation */
+    }
+
+    .image-container {
+        width: 400px;
+    }
+
+    /* Original Info (Left Side) - Position beside the image */
+    #originalBox {
+        position: relative;
+    }
+    #originalInfo {
+        position: absolute;
+        left: -200px; 
+        top: 0;
+        width: 180px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Resized Info (Right Side) - Position beside the image */
+    #resizedBox {
+        position: relative;
+    }
+    #resizedInfo {
+        position: absolute;
+        right: -200px;
+        top: 0;
+        width: 180px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    }
+}
+
+@media (max-width: 899px) {
+    #mainContentWrapper {
+        flex-direction: column;
+        align-items: center;
+        gap: 50px;
+    }
+    .image-container {
+        max-width: 400px;
+        width: 100%;
+    }
+    .info {
+        position: relative; 
+        margin-top: 0;
+    }
+}
+    </style>
+</head>
+<body>
+    <div id="preloader">
+        <div class="loader-ring"></div>
+    </div>
+    <h1 data-text="Image Resizer">Image Resizer</h1>
+
+    <div id="uploadControls">
+        <!-- These IDs are preserved but display is handled by the unified #statusBar now -->
+        <div id="loadingMessage"></div> 
+        <div id="loader"></div> 
+        
+        <div class="custom-file-input">
+            <span id="fileInputLabel">Choose File</span>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
+        <button id="uploadBtn">Upload</button>
+    </div>
+    
+    <div id="statusBar"></div>
+
+    <div id="message"></div>
+
+    <div id="mainContentWrapper">
+        <div class="image-container" id="originalBox">
+            <!-- Metadata for Original Image -->
+            <div id="originalInfo" class="info"></div> 
+            <div class="image-box">
+                <h2>Original Image</h2>
+                <img id="originalImage" class="image-preview" src="https://placehold.co/320x240/121212/e0e0e0?text=Upload+Image" onerror="this.src='https://placehold.co/320x240/121212/e0e0e0?text=Upload+Image';">
+            </div>
+        </div>
+
+        <div class="image-container" id="resizedBox">
+            <!-- Metadata for Resized Image -->
+            <div id="resizedInfo" class="info"></div> 
+            <div class="image-box">
+                <h2>Resized Image</h2>
+                <img id="resizedImage" class="image-preview" src="https://placehold.co/320x240/121212/e0e0e0?text=Resized+Result" onerror="this.src='https://placehold.co/320x240/121212/e0e0e0?text=Resized+Result';">
+            </div>
+        </div>
+    </div>
+    <a id="downloadBtn" download="resized_image.jpg" style="display: none;">Download Resized Image</a>
+    <script src="/static/app.js"></script>
+</body>
+</html>
